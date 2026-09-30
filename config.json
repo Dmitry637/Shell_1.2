@@ -1,0 +1,5 @@
+{
+  "vfsPath": "./vfs",
+  "prompt": "{username}@{hostname}:config$ ",
+  "startupScript": "./tests/startup.shell"
+}
