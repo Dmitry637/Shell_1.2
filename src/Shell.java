@@ -42,7 +42,9 @@ public class Shell {
         System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
         LaunchOptions cliOptions = parseCommandLineArgs(args);
         if (cliOptions == null || cliOptions.helpRequested) {
-            if (cliOptions != null) printUsage();
+            if (cliOptions != null) {
+                printUsage();
+            }
             return;
         }
         ConfigValues configValues = loadConfigValues(cliOptions);
@@ -114,11 +116,13 @@ public class Shell {
         try (Scanner scanner = new Scanner(System.in)) {
             while (true) {
                 System.out.print(config.prompt);
-                if (!scanner.hasNextLine()) break;
-
+                if (!scanner.hasNextLine()) {
+                    break;
+                }
                 String input = scanner.nextLine().trim();
-                if (input.isEmpty()) continue;
-
+                if (input.isEmpty()) {
+                    continue;
+                }
                 if (executeCommand(input) == ExecutionResult.EXIT) {
                     break;
                 }
@@ -135,45 +139,21 @@ public class Shell {
     private static void processArgument(
             String[] args, int i, LaunchOptions options) {
         String arg = args[i];
-        switch (arg) {
-            case "--help", "-h" -> options.helpRequested = true;
-            case "--vfs", "-v" -> handleVfsArg(args, i, options);
-            case "--prompt", "-p" -> handlePromptArg(args, i, options);
-            case "--startup", "-s" -> handleStartupArg(args, i, options);
-            case "--config", "-c" -> handleConfigArg(args, i, options);
-            default -> handleLongFormArgs(arg, options);
+        Option exact = Option.matchExact(arg);
+        if (exact != null) {
+            exact.applyWithNextValue(options, args, i);
+            return;
         }
+        applyPrefixedArgument(arg, options);
     }
-    private static void handleVfsArg(
-            String[] args, int i, LaunchOptions options) {
-        options.vfsPath = requireNextValue(args, ++i, "--vfs");
-    }
-    private static void handlePromptArg(
-            String[] args, int i, LaunchOptions options) {
-        options.prompt = requireNextValue(args, ++i, "--prompt");
-    }
-    private static void handleStartupArg(
-            String[] args, int i, LaunchOptions options) {
-        options.startupScript = requireNextValue(args, ++i, "--startup");
-    }
-    private static void handleConfigArg(
-            String[] args, int i, LaunchOptions options) {
-        options.configPath = requireNextValue(args, ++i, "--config");
-    }
-    private static void handleLongFormArgs(
+    private static void applyPrefixedArgument(
             String arg, LaunchOptions options) {
-        if (arg.startsWith("--vfs=")) {
-            options.vfsPath = arg.substring(6);
-        } else if (arg.startsWith("--prompt=")) {
-            options.prompt = arg.substring(9);
-        } else if (arg.startsWith("--startup=")) {
-            options.startupScript = arg.substring(10);
-        } else if (arg.startsWith("--config=")) {
-            options.configPath = arg.substring(9);
-        } else {
+        Option prefixed = Option.matchPrefix(arg);
+        if (prefixed == null) {
             throw new IllegalArgumentException(
                     "неизвестный параметр: " + arg);
         }
+        prefixed.applyInlineValue(options, arg);
     }
     private static String requireNextValue(
             String[] args, int index, String optionName) {
@@ -194,8 +174,13 @@ public class Shell {
     }
     private static String firstNonNull(
             String first, String second, String third) {
-        return first != null ? first
-                : (second != null ? second : third);
+        if (first != null) {
+            return first;
+        }
+        if (second != null) {
+            return second;
+        }
+        return third;
     }
     private static ConfigValues readConfig(Path configPath)
             throws IOException {
@@ -252,10 +237,11 @@ public class Shell {
     }
     private static ExecutionResult executeCommand(String input) {
         List<String> parts = parseCommandSafely(input);
-        if (parts == null || parts.isEmpty()) {
-            return parts == null
-                    ? ExecutionResult.ERROR
-                    : ExecutionResult.CONTINUE;
+        if (parts == null) {
+            return ExecutionResult.ERROR;
+        }
+        if (parts.isEmpty()) {
+            return ExecutionResult.CONTINUE;
         }
         return dispatchCommand(parts);
     }
@@ -268,52 +254,17 @@ public class Shell {
         }
     }
     private static List<String> parseCommand(String input) {
-        List<String> parts = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        Character quote = null;
-        for (int i = 0; i < input.length(); i++) {
-            char ch = input.charAt(i);
-
-            if (quote != null) {
-                if (ch == quote) {
-                    quote = null;
-                } else {
-                    current.append(ch);
-                }
-            } else {
-                if (ch == '"' || ch == '\'') {
-                    quote = ch;
-                } else if (Character.isWhitespace(ch)) {
-                    if (current.length() > 0) {
-                        parts.add(current.toString());
-                        current.setLength(0);
-                    }
-                } else if (ch == '#' && (i == 0
-                        || Character.isWhitespace(input.charAt(i - 1)))) {
-                    break;
-                } else {
-                    current.append(ch);
-                }
-            }
-        }
-        if (quote != null) {
-            throw new IllegalArgumentException("No closing quotation");
-        }
-        if (current.length() > 0) {
-            parts.add(current.toString());
-        }
-        return parts;
+        return new CommandTokenizer().tokenize(input);
     }
     private static ExecutionResult dispatchCommand(List<String> parts) {
         String command = parts.get(0);
         return switch (command) {
-            case "ls", "cd" -> handleListOrChangeDirCommand(parts);
+            case "ls", "cd" -> handleStubCommand(parts);
             case "exit" -> handleExitCommand(parts);
             default -> handleUnknownCommand(command);
         };
     }
-    private static ExecutionResult handleListOrChangeDirCommand(
-            List<String> parts) {
+    private static ExecutionResult handleStubCommand(List<String> parts) {
         String command = parts.get(0);
         String[] arguments = parts.subList(1, parts.size())
                 .toArray(new String[0]);
@@ -349,21 +300,158 @@ public class Shell {
         }
     }
     private static void printUsage() {
-        System.out.println("Эмулятор Shell — Этап 2: Конфигурация\n");
+        System.out.println("Эмулятор Shell — Этап 2: Конфигурация");
+        System.out.println();
         System.out.println("Использование:");
-        System.out.println("  java -cp out Shell [параметры]\n");
+        System.out.println("  java -cp out Shell [параметры]");
+        System.out.println();
         System.out.println("Параметры:");
         System.out.println("  --vfs, -v <path>       путь к VFS");
         System.out.println("  --prompt, -p <text>    приглашение");
         System.out.println("  --startup, -s <path>   стартовый скрипт");
         System.out.println("  --config, -c <path>    JSON-конфигурация");
-        System.out.println("  --help, -h             показать справку\n");
+        System.out.println("  --help, -h             показать справку");
+        System.out.println();
         System.out.println("В prompt поддерживаются {username} и {hostname}.");
-        System.out.println("Значения из config.json имеют приоритет над CLI.");
+        System.out.println("Значения из config.json важнее параметров CLI.");
+    }
+    private enum Option {
+        HELP("--help", "-h", null),
+        VFS("--vfs", "-v", "--vfs="),
+        PROMPT("--prompt", "-p", "--prompt="),
+        STARTUP("--startup", "-s", "--startup="),
+        CONFIG("--config", "-c", "--config=");
+        private final String longFlag;
+        private final String shortFlag;
+        private final String prefix;
+        Option(String longFlag, String shortFlag, String prefix) {
+            this.longFlag = longFlag;
+            this.shortFlag = shortFlag;
+            this.prefix = prefix;
+        }
+        static Option matchExact(String arg) {
+            for (Option option : values()) {
+                if (option.isExact(arg)) {
+                    return option;
+                }
+            }
+            return null;
+        }
+        static Option matchPrefix(String arg) {
+            for (Option option : values()) {
+                if (option.hasPrefix(arg)) {
+                    return option;
+                }
+            }
+            return null;
+        }
+        private boolean isExact(String arg) {
+            return arg.equals(longFlag) || arg.equals(shortFlag);
+        }
+        private boolean hasPrefix(String arg) {
+            return prefix != null && arg.startsWith(prefix);
+        }
+        void applyWithNextValue(
+                LaunchOptions options, String[] args, int index) {
+            switch (this) {
+                case HELP -> options.helpRequested = true;
+                case VFS -> options.vfsPath =
+                        requireNextValue(args, index + 1, longFlag);
+                case PROMPT -> options.prompt =
+                        requireNextValue(args, index + 1, longFlag);
+                case STARTUP -> options.startupScript =
+                        requireNextValue(args, index + 1, longFlag);
+                case CONFIG -> options.configPath =
+                        requireNextValue(args, index + 1, longFlag);
+            }
+        }
+        void applyInlineValue(LaunchOptions options, String arg) {
+            String value = requireOptionValue(
+                    longFlag, arg.substring(prefix.length()));
+            switch (this) {
+                case VFS -> options.vfsPath = value;
+                case PROMPT -> options.prompt = value;
+                case STARTUP -> options.startupScript = value;
+                case CONFIG -> options.configPath = value;
+                default -> throw new IllegalArgumentException(
+                        "неизвестный параметр: " + arg);
+            }
+        }
+    }
+    private static class CommandTokenizer {
+        private final List<String> parts = new ArrayList<>();
+        private final StringBuilder current = new StringBuilder();
+        private Character quote;
+        List<String> tokenize(String input) {
+            for (int i = 0; i < input.length(); i++) {
+                if (!processChar(input, i)) {
+                    break;
+                }
+            }
+            finish();
+            return parts;
+        }
+        private boolean processChar(String input, int i) {
+            char ch = input.charAt(i);
+            if (quote != null) {
+                processQuotedChar(ch);
+                return true;
+            }
+            return processUnquotedChar(input, i, ch);
+        }
+        private void processQuotedChar(char ch) {
+            if (ch == quote) {
+                quote = null;
+            } else {
+                current.append(ch);
+            }
+        }
+        private boolean processUnquotedChar(String input, int i, char ch) {
+            if (ch == '"' || ch == '\'') {
+                quote = ch;
+                return true;
+            }
+            if (isCommentStart(input, i, ch)) {
+                return false;
+            }
+            if (Character.isWhitespace(ch)) {
+                flushCurrent();
+                return true;
+            }
+            current.append(ch);
+            return true;
+        }
+        private boolean isCommentStart(String input, int i, char ch) {
+            if (ch != '#') {
+                return false;
+            }
+            return i == 0 || Character.isWhitespace(input.charAt(i - 1));
+        }
+        private void flushCurrent() {
+            if (current.length() > 0) {
+                parts.add(current.toString());
+                current.setLength(0);
+            }
+        }
+        private void finish() {
+            if (quote != null) {
+                throw new IllegalArgumentException("No closing quotation");
+            }
+            flushCurrent();
+        }
     }
     private static class JsonParser {
+        private static final Map<Character, String> JSON_ESCAPES = Map.of(
+                '"', "\"",
+                '\\', "\\\\",
+                '/', "/",
+                'b', "\b",
+                'f', "\f",
+                'n', "\n",
+                'r', "\r",
+                't', "\t");
         private final String json;
-        private int index = 0;
+        private int index;
         JsonParser(String json) {
             this.json = json;
         }
@@ -372,19 +460,7 @@ public class Shell {
             expect('{');
             Map<String, String> result = new LinkedHashMap<>();
             while (peek() != '}') {
-                String key = parseString();
-                skipWhitespace();
-                expect(':');
-                String value = parseValue();
-                result.put(key, value);
-                skipWhitespace();
-                char current = peek();
-                if (current == ',') {
-                    index++;
-                } else if (current != '}') {
-                    throw new IllegalArgumentException(
-                            "ожидалась ',' или '}' в JSON");
-                }
+                parseEntry(result);
             }
             expect('}');
             skipWhitespace();
@@ -393,6 +469,21 @@ public class Shell {
                         "лишние символы после JSON-объекта");
             }
             return result;
+        }
+        private void parseEntry(Map<String, String> result) {
+            String key = parseString();
+            skipWhitespace();
+            expect(':');
+            String value = parseValue();
+            result.put(key, value);
+            skipWhitespace();
+            char current = peek();
+            if (current == ',') {
+                index++;
+            } else if (current != '}') {
+                throw new IllegalArgumentException(
+                        "ожидалась ',' или '}' в JSON");
+            }
         }
         private String parseValue() {
             skipWhitespace();
@@ -425,19 +516,17 @@ public class Shell {
                         "незавершённая escape-последовательность");
             }
             char escaped = json.charAt(index++);
-            switch (escaped) {
-                case '"' -> result.append('"');
-                case '\\' -> result.append('\\');
-                case '/' -> result.append('/');
-                case 'b' -> result.append('\b');
-                case 'f' -> result.append('\f');
-                case 'n' -> result.append('\n');
-                case 'r' -> result.append('\r');
-                case 't' -> result.append('\t');
-                case 'u' -> result.append(parseUnicode());
-                default -> throw new IllegalArgumentException(
-                        "неподдерживаемая escape: \\" + escaped);
+            if (escaped == 'u') {
+                result.append(parseUnicode());
+                return;
             }
+            String replacement = JSON_ESCAPES.get(escaped);
+            if (replacement == null) {
+                throw new IllegalArgumentException(
+                        "неподдерживаемая escape-последовательность: \\"
+                                + escaped);
+            }
+            result.append(replacement);
         }
         private String parseUnicode() {
             if (index + 4 > json.length()) {
@@ -468,7 +557,10 @@ public class Shell {
             index++;
         }
         private char peek() {
-            return index >= json.length() ? '\0' : json.charAt(index);
+            if (index >= json.length()) {
+                return '\0';
+            }
+            return json.charAt(index);
         }
     }
 }
