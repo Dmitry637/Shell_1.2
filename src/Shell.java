@@ -1,5 +1,6 @@
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
@@ -37,13 +38,11 @@ public class Shell {
         Path vfsDirectory;
     }
     public static void main(String[] args) {
-        System.setOut(new java.io.PrintStream(System.out, true, StandardCharsets.UTF_8));
-        System.setErr(new java.io.PrintStream(System.err, true, StandardCharsets.UTF_8));
+        System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
         LaunchOptions cliOptions = parseCommandLineArgs(args);
         if (cliOptions == null || cliOptions.helpRequested) {
-            if (cliOptions != null) {
-                printUsage();
-            }
+            if (cliOptions != null) printUsage();
             return;
         }
         ConfigValues configValues = loadConfigValues(cliOptions);
@@ -97,15 +96,16 @@ public class Shell {
     private static void displayConfigInfo(EffectiveConfig config) {
         System.out.println("VFS: " + config.vfsDirectory);
         if (config.startupScript != null) {
-            Path scriptPath = Paths.get(config.startupScript)
-                    .toAbsolutePath().normalize();
-            System.out.println("Стартовый скрипт: " + scriptPath);
+            System.out.println("Стартовый скрипт: "
+                    + Paths.get(config.startupScript)
+                    .toAbsolutePath().normalize());
         }
     }
     private static boolean executeStartupScript(EffectiveConfig config) {
         if (config.startupScript != null) {
-            Path scriptPath = Paths.get(config.startupScript);
-            return runStartupScript(scriptPath, config.prompt,
+            return runStartupScript(
+                    Paths.get(config.startupScript),
+                    config.prompt,
                     config.vfsDirectory);
         }
         return true;
@@ -114,13 +114,11 @@ public class Shell {
         try (Scanner scanner = new Scanner(System.in)) {
             while (true) {
                 System.out.print(config.prompt);
-                if (!scanner.hasNextLine()) {
-                    break;
-                }
+                if (!scanner.hasNextLine()) break;
+
                 String input = scanner.nextLine().trim();
-                if (input.isEmpty()) {
-                    continue;
-                }
+                if (input.isEmpty()) continue;
+
                 if (executeCommand(input) == ExecutionResult.EXIT) {
                     break;
                 }
@@ -134,8 +132,8 @@ public class Shell {
         }
         return options;
     }
-    private static void processArgument(String[] args, int i,
-                                        LaunchOptions options) {
+    private static void processArgument(
+            String[] args, int i, LaunchOptions options) {
         String arg = args[i];
         switch (arg) {
             case "--help", "-h" -> options.helpRequested = true;
@@ -146,49 +144,47 @@ public class Shell {
             default -> handleLongFormArgs(arg, options);
         }
     }
-    private static void handleVfsArg(String[] args, int i,
-                                     LaunchOptions options) {
+    private static void handleVfsArg(
+            String[] args, int i, LaunchOptions options) {
         options.vfsPath = requireNextValue(args, ++i, "--vfs");
     }
-    private static void handlePromptArg(String[] args, int i,
-                                        LaunchOptions options) {
+    private static void handlePromptArg(
+            String[] args, int i, LaunchOptions options) {
         options.prompt = requireNextValue(args, ++i, "--prompt");
     }
-    private static void handleStartupArg(String[] args, int i,
-                                         LaunchOptions options) {
+    private static void handleStartupArg(
+            String[] args, int i, LaunchOptions options) {
         options.startupScript = requireNextValue(args, ++i, "--startup");
     }
-    private static void handleConfigArg(String[] args, int i,
-                                        LaunchOptions options) {
+    private static void handleConfigArg(
+            String[] args, int i, LaunchOptions options) {
         options.configPath = requireNextValue(args, ++i, "--config");
     }
-    private static void handleLongFormArgs(String arg,
-                                           LaunchOptions options) {
+    private static void handleLongFormArgs(
+            String arg, LaunchOptions options) {
         if (arg.startsWith("--vfs=")) {
-            options.vfsPath = requireOptionValue("--vfs", arg.substring(6));
+            options.vfsPath = arg.substring(6);
         } else if (arg.startsWith("--prompt=")) {
-            options.prompt = requireOptionValue("--prompt", arg.substring(9));
+            options.prompt = arg.substring(9);
         } else if (arg.startsWith("--startup=")) {
-            options.startupScript = requireOptionValue("--startup",
-                    arg.substring(10));
+            options.startupScript = arg.substring(10);
         } else if (arg.startsWith("--config=")) {
-            options.configPath = requireOptionValue("--config",
-                    arg.substring(9));
+            options.configPath = arg.substring(9);
         } else {
             throw new IllegalArgumentException(
                     "неизвестный параметр: " + arg);
         }
     }
-    private static String requireNextValue(String[] args, int index,
-                                           String optionName) {
+    private static String requireNextValue(
+            String[] args, int index, String optionName) {
         if (index >= args.length) {
             throw new IllegalArgumentException(
                     "для " + optionName + " требуется значение");
         }
         return requireOptionValue(optionName, args[index]);
     }
-    private static String requireOptionValue(String optionName,
-                                             String value) {
+    private static String requireOptionValue(
+            String optionName, String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(
                     "для " + optionName
@@ -196,14 +192,15 @@ public class Shell {
         }
         return value;
     }
-    private static String firstNonNull(String first, String second,
-                                       String third) {
-        return first != null ? first : (second != null ? second : third);
+    private static String firstNonNull(
+            String first, String second, String third) {
+        return first != null ? first
+                : (second != null ? second : third);
     }
     private static ConfigValues readConfig(Path configPath)
             throws IOException {
-        String content = Files.readString(configPath,
-                StandardCharsets.UTF_8);
+        String content = Files.readString(
+                configPath, StandardCharsets.UTF_8);
         Map<String, String> values = new JsonParser(content).parse();
         ConfigValues config = new ConfigValues();
         config.vfsPath = values.get("vfsPath");
@@ -211,9 +208,8 @@ public class Shell {
         config.startupScript = values.get("startupScript");
         return config;
     }
-    private static boolean runStartupScript(Path startupPath,
-                                            String prompt,
-                                            Path vfsDirectory) {
+    private static boolean runStartupScript(
+            Path startupPath, String prompt, Path vfsDirectory) {
         if (!Files.isRegularFile(startupPath)) {
             System.out.println("Ошибка чтения стартового скрипта '"
                     + startupPath + "': файл не найден.");
@@ -240,9 +236,8 @@ public class Shell {
         }
         return true;
     }
-    private static boolean executeStartupScriptLine(String line,
-                                                    int lineNumber,
-                                                    String prompt) {
+    private static boolean executeStartupScriptLine(
+            String line, int lineNumber, String prompt) {
         String command = line.trim();
         if (command.isEmpty() || command.startsWith("#")) {
             return true;
@@ -294,8 +289,7 @@ public class Shell {
                         current.setLength(0);
                     }
                 } else if (ch == '#' && (i == 0
-                        || Character.isWhitespace(
-                        input.charAt(i - 1)))) {
+                        || Character.isWhitespace(input.charAt(i - 1)))) {
                     break;
                 } else {
                     current.append(ch);
@@ -303,8 +297,7 @@ public class Shell {
             }
         }
         if (quote != null) {
-            throw new IllegalArgumentException(
-                    "No closing quotation");
+            throw new IllegalArgumentException("No closing quotation");
         }
         if (current.length() > 0) {
             parts.add(current.toString());
@@ -327,8 +320,7 @@ public class Shell {
         printStub(command, arguments);
         return ExecutionResult.CONTINUE;
     }
-    private static ExecutionResult handleExitCommand(
-            List<String> parts) {
+    private static ExecutionResult handleExitCommand(List<String> parts) {
         if (parts.size() > 1) {
             System.out.println("Ошибка: exit без аргументов.");
             return ExecutionResult.ERROR;
@@ -336,10 +328,8 @@ public class Shell {
         System.out.println("Shell завершен.");
         return ExecutionResult.EXIT;
     }
-    private static ExecutionResult handleUnknownCommand(
-            String command) {
-        System.out.println("Ошибка: неизвестная команда: "
-                + command);
+    private static ExecutionResult handleUnknownCommand(String command) {
+        System.out.println("Ошибка: неизвестная команда: " + command);
         return ExecutionResult.ERROR;
     }
     private static void printStub(String command, String[] arguments) {
@@ -363,20 +353,13 @@ public class Shell {
         System.out.println("Использование:");
         System.out.println("  java -cp out Shell [параметры]\n");
         System.out.println("Параметры:");
-        System.out.println("  --vfs, -v <path>       "
-                + "путь к физическому приложению VFS");
-        System.out.println("  --prompt, -p <text>    "
-                + "пользовательское приглашение");
-        System.out.println("  --startup, -s <path>   "
-                + "путь к стартовому скрипту");
-        System.out.println("  --config, -c <path>    "
-                + "путь к JSON-конфигурации");
-        System.out.println("  --help, -h             "
-                + "показать эту справку\n");
-        System.out.println("В prompt поддерживаются подстановки "
-                + "{username} и {hostname}.");
-        System.out.println("Значения из config.json имеют приоритет "
-                + "над параметрами CLI.");
+        System.out.println("  --vfs, -v <path>       путь к VFS");
+        System.out.println("  --prompt, -p <text>    приглашение");
+        System.out.println("  --startup, -s <path>   стартовый скрипт");
+        System.out.println("  --config, -c <path>    JSON-конфигурация");
+        System.out.println("  --help, -h             показать справку\n");
+        System.out.println("В prompt поддерживаются {username} и {hostname}.");
+        System.out.println("Значения из config.json имеют приоритет над CLI.");
     }
     private static class JsonParser {
         private final String json;
@@ -453,8 +436,7 @@ public class Shell {
                 case 't' -> result.append('\t');
                 case 'u' -> result.append(parseUnicode());
                 default -> throw new IllegalArgumentException(
-                        "неподдерживаемая escape-последовательность: \\"
-                                + escaped);
+                        "неподдерживаемая escape: \\" + escaped);
             }
         }
         private String parseUnicode() {
@@ -465,8 +447,7 @@ public class Shell {
             String hex = json.substring(index, index + 4);
             index += 4;
             try {
-                return String.valueOf((char)
-                        Integer.parseInt(hex, 16));
+                return String.valueOf((char) Integer.parseInt(hex, 16));
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException(
                         "некорректная Unicode escape-последовательность");
